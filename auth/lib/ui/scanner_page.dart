@@ -1,33 +1,33 @@
-import 'dart:io';
-
 import 'package:ente_auth/l10n/l10n.dart';
 import 'package:ente_auth/models/code.dart';
 import 'package:ente_auth/utils/toast_util.dart';
 import 'package:flutter/material.dart';
-import 'package:qr_code_scanner/qr_code_scanner.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 
 class ScannerPage extends StatefulWidget {
-  const ScannerPage({super.key});
+  ScannerPage({super.key});
 
   @override
-  State<ScannerPage> createState() => ScannerPageState();
+  State<ScannerPage> createState() => _ScannerPageState();
 }
 
-class ScannerPageState extends State<ScannerPage> {
-  final GlobalKey qrKey = GlobalKey(debugLabel: 'QR');
-  QRViewController? controller;
-  String? totp;
+class _ScannerPageState extends State<ScannerPage> {
+  late final MobileScannerController _controller;
 
-  // In order to get hot reload to work we need to pause the camera if the platform
-  // is android, or resume the camera if the platform is iOS.
   @override
-  void reassemble() {
-    super.reassemble();
-    if (Platform.isAndroid) {
-      controller!.pauseCamera();
-    } else if (Platform.isIOS) {
-      controller!.resumeCamera();
-    }
+  void initState() {
+    super.initState();
+    _controller = MobileScannerController(
+      autoStart: true,
+      formats: const [BarcodeFormat.qrCode],
+      returnImage: false,
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 
   @override
@@ -41,16 +41,15 @@ class ScannerPageState extends State<ScannerPage> {
         children: <Widget>[
           Expanded(
             flex: 5,
-            child: QRView(
-              key: qrKey,
-              onQRViewCreated: _onQRViewCreated,
-              formatsAllowed: const [BarcodeFormat.qrcode],
+            child: MobileScanner(
+              controller: _controller,
+              onDetect: _onDetect,
             ),
           ),
           Expanded(
             flex: 1,
             child: Center(
-              child: (totp != null) ? Text(totp!) : Text(l10n.scanACode),
+              child: Text(l10n.scanACode),
             ),
           ),
         ],
@@ -58,28 +57,24 @@ class ScannerPageState extends State<ScannerPage> {
     );
   }
 
-  void _onQRViewCreated(QRViewController controller) {
-    this.controller = controller;
-    // h4ck to remove black screen on Android scanners: https://github.com/juliuscanute/qr_code_scanner/issues/560#issuecomment-1159611301
-    if (Platform.isAndroid) {
-      controller.pauseCamera();
-      controller.resumeCamera();
-    }
-    controller.scannedDataStream.listen((scanData) {
-      try {
-        final code = Code.fromOTPAuthUrl(scanData.code!);
-        controller.dispose();
-        Navigator.of(context).pop(code);
-      } catch (e) {
-        // Log
+  void _onDetect(BarcodeCapture capture) {
+    for (final barcode in capture.barcodes) {
+      final data = barcode.rawValue;
+      if (data == null) {
         showToast(context, context.l10n.invalidQRCode);
+        continue;
       }
-    });
-  }
 
-  @override
-  void dispose() {
-    controller?.dispose();
-    super.dispose();
+      final Code code;
+      try {
+        code = Code.fromOTPAuthUrl(data);
+      } catch (e) {
+        showToast(context, context.l10n.invalidQRCode);
+        continue;
+      }
+
+      Navigator.of(context).pop<Code>(code);
+      return;
+    }
   }
 }

@@ -165,7 +165,7 @@ class _HomePageState extends State<HomePage> {
     final Code? code = await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (BuildContext context) {
-          return const ScannerPage();
+          return ScannerPage();
         },
       ),
     );
